@@ -556,6 +556,32 @@ void ConfigProcessor::doIncludesRecursive(
         }
     };
 
+    auto parseXMLContent = [&](const std::string & value) -> std::string
+    {
+        if (value.empty())
+            return value;
+    
+        const std::string cdata_start = "<![CDATA[";
+        const std::string cdata_end   = "]]>";
+    
+        // Check if the value is wrapped in CDATA
+        if (startsWith(value, cdata_start) && endsWith(value, cdata_end))
+            return value;
+    
+        // Trivial check if we have unencoded special characters
+        bool needs_encoding = (value.find_first_of("<>&'\"") != std::string::npos) &&
+                              (value.find("&lt;")   == std::string::npos) &&
+                              (value.find("&gt;")   == std::string::npos) &&
+                              (value.find("&amp;")  == std::string::npos) &&
+                              (value.find("&quot;") == std::string::npos) &&
+                              (value.find("&apos;") == std::string::npos);
+    
+        if (needs_encoding)
+            return evaluateConstantFunction("encodeXMLComponent", value);
+    
+        return value;
+    };
+
     if (attr_nodes["incl"]) // we have include subst
     {
         auto get_incl_node = [&](const std::string & name)
@@ -584,7 +610,7 @@ void ConfigProcessor::doIncludesRecursive(
                     return nullptr;
 
                 /// Enclose contents into a fake <from_zk> tag to allow pure text substitutions.
-                zk_document = dom_parser.parseString("<from_zk>" + znode.contents + "</from_zk>");
+                zk_document = dom_parser.parseString("<from_zk>" + parseXMLContent(znode.contents) + "</from_zk>");
                 return getRootNode(zk_document.get());
             };
 
@@ -605,7 +631,7 @@ void ConfigProcessor::doIncludesRecursive(
             if (env_val == nullptr)
                 return nullptr;
 
-            env_document = dom_parser.parseString("<from_env>" + std::string{env_val} + "</from_env>");
+            env_document = dom_parser.parseString("<from_env>" + parseXMLContent(std::string{env_val}) + "</from_env>");
 
             return getRootNode(env_document.get());
         };
